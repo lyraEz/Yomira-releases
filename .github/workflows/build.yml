@@ -124,6 +124,14 @@ jobs:
           python3 -I scripts/yomira/release-notes.py "$VERSION" "$RUNNER_TEMP/release-notes.md"
           gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/release-notes.md"
 
+      - name: Regex patterns compile on Android (ICU)
+        if: steps.version.outputs.build == 'true'
+        # The JVM accepts patterns Android rejects; one of those crashed 1.8.0 at start.
+        run: |
+          if [ -f scripts/yomira/check-regex-icu.py ]; then
+            python3 -I scripts/yomira/check-regex-icu.py
+          fi
+
       - name: Set up JDK
         if: steps.version.outputs.build == 'true'
         uses: actions/setup-java@v4
