@@ -1,0 +1,183 @@
+name: Build and publish
+
+# Builds the signed APKs from the private source repository (lyraEz/Yomira) and publishes them as
+# a release of this public repository, which the in-app updater reads. Actions minutes and
+# storage are free for public repositories, so releases do not depend on the private plan.
+#
+# Starts by hand (Actions > Build and publish > Run workflow) or when the source repository sends
+# a "build" repository_dispatch. It reads versionName from the source and stops when release
+# v<versionName> already exists here. With "update_notes" it only rewrites the text of that
+# release from CHANGELOG.md.
+#
+# Secrets of this repository (Settings > Secrets and variables > Actions):
+#   YOMIRA_SOURCE_TOKEN       fine-grained token with Contents: read-only on lyraEz/Yomira
+#   YOMIRA_KEYSTORE_BASE64    base64 of the release keystore (.jks)
+#   YOMIRA_KEYSTORE_PASSWORD  keystore password
+#   YOMIRA_KEY_ALIAS          key alias
+#   YOMIRA_KEY_PASSWORD       key password (may be the same as the keystore password)
+# Optional (become the app's default keys; users can still type their own):
+#   YOMIRA_TMDB_API_KEY       TMDB API key (v3) or read access token (v4)
+#   YOMIRA_ANIME_SKIP_CLIENT_ID  Anime Skip API client id
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit of lyraEz/Yomira to build
+        type: string
+        default: ccr-c637b615-t3byst
+      prerelease:
+        description: Mark the release as a pre-release
+        type: boolean
+        default: false
+      update_notes:
+        description: Only rewrite the text of the existing release from CHANGELOG.md
+        type: boolean
+        default: false
+  repository_dispatch:
+    types: [build]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_REPO: lyraEz/Yomira
+  SOURCE_REF: ${{ github.event.inputs.ref || github.event.client_payload.ref || 'ccr-c637b615-t3byst' }}
+  PRERELEASE: ${{ github.event.inputs.prerelease || github.event.client_payload.prerelease || 'false' }}
+  UPDATE_NOTES: ${{ github.event.inputs.update_notes || github.event.client_payload.update_notes || 'false' }}
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check secrets
+        env:
+          SOURCE_TOKEN: ${{ secrets.YOMIRA_SOURCE_TOKEN }}
+          KEYSTORE_BASE64: ${{ secrets.YOMIRA_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.YOMIRA_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.YOMIRA_KEY_ALIAS }}
+        run: |
+          missing=""
+          [ -n "$SOURCE_TOKEN" ] || missing="$missing YOMIRA_SOURCE_TOKEN"
+          if [ "$UPDATE_NOTES" != "true" ]; then
+            [ -n "$KEYSTORE_BASE64" ] || missing="$missing YOMIRA_KEYSTORE_BASE64"
+            [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing YOMIRA_KEYSTORE_PASSWORD"
+            [ -n "$KEY_ALIAS" ] || missing="$missing YOMIRA_KEY_ALIAS"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets in this repository:$missing"
+            exit 1
+          fi
+
+      - name: Clone source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ env.SOURCE_REF }}
+          token: ${{ secrets.YOMIRA_SOURCE_TOKEN }}
+          # The build reads the commit count and the last commit time.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read version and look for its release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(sed -n 's/^ *versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -1)"
+          if [ -z "$version" ]; then
+            echo "::error::versionName not found in app/build.gradle.kts"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            exists=true
+          else
+            exists=false
+          fi
+          if [ "$UPDATE_NOTES" = "true" ]; then
+            build=false
+          elif [ "$exists" = "true" ]; then
+            build=false
+            echo "Release v$version already exists; nothing to build."
+          else
+            build=true
+            echo "Release v$version not found; it will be built and published."
+          fi
+          echo "exists=$exists" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite release notes
+        if: env.UPDATE_NOTES == 'true' && steps.version.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python3 -I scripts/yomira/release-notes.py "$VERSION" "$RUNNER_TEMP/release-notes.md"
+          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Set up JDK
+        if: steps.version.outputs.build == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up Gradle
+        if: steps.version.outputs.build == 'true'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore keystore
+        if: steps.version.outputs.build == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.YOMIRA_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/yomira-release.jks"
+          echo "YOMIRA_KEYSTORE_FILE=$RUNNER_TEMP/yomira-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build signed APKs
+        if: steps.version.outputs.build == 'true'
+        env:
+          YOMIRA_KEYSTORE_PASSWORD: ${{ secrets.YOMIRA_KEYSTORE_PASSWORD }}
+          YOMIRA_KEY_ALIAS: ${{ secrets.YOMIRA_KEY_ALIAS }}
+          YOMIRA_KEY_PASSWORD: ${{ secrets.YOMIRA_KEY_PASSWORD }}
+          # Optional built-in API keys (empty when the secrets do not exist: users set them in the app)
+          YOMIRA_TMDB_API_KEY: ${{ secrets.YOMIRA_TMDB_API_KEY }}
+          YOMIRA_ANIME_SKIP_CLIENT_ID: ${{ secrets.YOMIRA_ANIME_SKIP_CLIENT_ID }}
+        run: ./gradlew --no-daemon :app:assembleRelease -Penable-updater=true
+
+      - name: Inspect APKs (launcher, SDK levels, ABIs)
+        if: steps.version.outputs.build == 'true'
+        run: scripts/yomira/inspect-apks.sh app/build/outputs/apk/release
+
+      - name: Collect, verify and checksum
+        id: collect
+        if: steps.version.outputs.build == 'true'
+        run: scripts/yomira/package-release.sh app/build/outputs/apk/release dist
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/yomira-release.jks"
+
+      - name: Publish release
+        if: steps.version.outputs.build == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.collect.outputs.version }}
+          target_commitish: main
+          name: Yomira ${{ steps.collect.outputs.version }}
+          draft: false
+          make_latest: ${{ env.PRERELEASE != 'true' }}
+          prerelease: ${{ env.PRERELEASE == 'true' }}
+          body_path: dist/release-notes.md
+          files: |
+            dist/*.apk
+            dist/SHA256SUMS.txt
