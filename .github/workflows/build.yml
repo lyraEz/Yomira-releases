@@ -24,7 +24,7 @@ on:
       ref:
         description: Branch, tag or commit of lyraEz/Yomira to build
         type: string
-        default: ccr-c637b615-t3byst
+        default: main
       prerelease:
         description: Mark the release as a pre-release
         type: boolean
@@ -45,7 +45,7 @@ permissions:
 
 env:
   SOURCE_REPO: lyraEz/Yomira
-  SOURCE_REF: ${{ github.event.inputs.ref || github.event.client_payload.ref || 'ccr-c637b615-t3byst' }}
+  SOURCE_REF: ${{ github.event.inputs.ref || github.event.client_payload.ref || 'main' }}
   PRERELEASE: ${{ github.event.inputs.prerelease || github.event.client_payload.prerelease || 'false' }}
   UPDATE_NOTES: ${{ github.event.inputs.update_notes || github.event.client_payload.update_notes || 'false' }}
 
@@ -183,8 +183,8 @@ jobs:
           target_commitish: main
           name: Yomira ${{ steps.collect.outputs.version }}
           draft: false
-          make_latest: ${{ env.PRERELEASE != 'true' }}
-          prerelease: ${{ env.PRERELEASE == 'true' }}
+          make_latest: ${{ env.PRERELEASE != 'true' && !contains(steps.collect.outputs.version, '-beta') }}
+          prerelease: ${{ env.PRERELEASE == 'true' || contains(steps.collect.outputs.version, '-beta') }}
           body_path: dist/release-notes.md
           files: |
             dist/*.apk

@@ -1,16 +1,29 @@
-# Yomira — downloads
+<div align="center">
 
-APKs assinados do Yomira, um app de animes para celulares Android (8.0 ou mais novo).
+<img src="https://raw.githubusercontent.com/lyraEz/Yomira/main/.github/assets/icon.png" alt="Yomira icon" width="96"/>
 
-Baixe a versão mais recente em [Releases](https://github.com/lyraEz/Yomira-releases/releases/latest):
+# Yomira — beta versions
 
-| Arquivo | Para |
+</div>
+
+This repository holds the **beta versions** of [Yomira](https://github.com/lyraEz/Yomira), an anime,
+series and movie player for Android phones (8.0 or newer).
+
+- **Betas** are published here as pre-releases, before they become stable. They may have rough
+  edges; please report problems in the [main repository](https://github.com/lyraEz/Yomira/issues).
+- **Stable versions** are published in [lyraEz/Yomira](https://github.com/lyraEz/Yomira/releases/latest).
+  A copy of each stable release is also kept here so that older app versions keep updating.
+
+To be offered betas inside the app, turn on **More > About > Beta versions**. Betas install over a
+stable version and keep your library, and the next stable version installs over a beta.
+
+| File | For |
 | --- | --- |
-| `Yomira-vX.Y.Z-arm64-v8a.apk` | A maioria dos celulares (64 bits) |
-| `Yomira-vX.Y.Z-armeabi-v7a.apk` | Celulares de 32 bits |
-| `Yomira-vX.Y.Z-universal.apk` | Qualquer celular ARM (arquivo maior) |
+| `Yomira-vX.Y.Z-beta.N-arm64-v8a.apk` | Most phones (64-bit) |
+| `Yomira-vX.Y.Z-beta.N-armeabi-v7a.apk` | 32-bit phones |
+| `Yomira-vX.Y.Z-beta.N-universal.apk` | Any ARM phone (larger file) |
 
-Depois de instalado, o próprio app avisa quando houver versão nova (Mais → Sobre → Verificar atualizações).
+To check a file, compare it with the release's `SHA256SUMS.txt`. Every APK is signed with the same
+certificate, SHA-256 `e4d0adb9369971bfbe862554d8e7d418b43c17321e2694719d0efeb0f1d677ce`.
 
-Para conferir um arquivo, compare com o `SHA256SUMS.txt` da release. Todos os APKs são assinados com o mesmo
-certificado, SHA-256 `e4d0adb9369971bfbe862554d8e7d418b43c17321e2694719d0efeb0f1d677ce`.
+Website: [lyraez.github.io/Yomira](https://lyraez.github.io/Yomira/)
