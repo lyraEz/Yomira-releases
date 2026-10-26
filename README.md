@@ -26,4 +26,4 @@ stable version and keep your library, and the next stable version installs over 
 To check a file, compare it with the release's `SHA256SUMS.txt`. Every APK is signed with the same
 certificate, SHA-256 `e4d0adb9369971bfbe862554d8e7d418b43c17321e2694719d0efeb0f1d677ce`.
 
-Website: [lyraez.github.io/Yomira](https://lyraez.github.io/Yomira/)
+Website: [yomira.lyraez.lol](https://yomira.lyraez.lol)
